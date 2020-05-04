@@ -33,6 +33,7 @@ public:
 private:
     GLFWwindow* window = nullptr;
     VkInstance instance;
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 
     void initWindow() {
         glfwInit();
@@ -42,11 +43,15 @@ private:
         glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
         // Initialize GLFWwindow (GLFWmonitor param is used for optionally opening window on a specific monitor, and GLFWwindow share param is only relevant to OpenGL)
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+        if(window == NULL) {
+            throw std::runtime_error("failed to create GLFWwindow!\n");
+        } else { /* Segmentation fault when calling std::cout ?? */ }
     }
 
     void initVulkan() {
         createInstance();
         queryAvailableExtensions();
+        pickPhysicalDevice();
     }
 
     void createInstance() {
@@ -58,7 +63,7 @@ private:
         VkApplicationInfo appInfo;
         // Set the VkStructureType
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        appInfo.pApplicationName = "Hello Triangle";
+        appInfo.pApplicationName = "Vulkan";
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.pEngineName = "No Engine";
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -119,6 +124,50 @@ private:
         }
 
         return layerFound;
+    }
+    
+    // The selected graphics card is stored in a VkPhysicalDevice handle
+    // This process is similar to querying available extensions and checking validation layer support
+    void pickPhysicalDevice() {
+        uint32_t deviceCount = 0;
+        vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+        if(deviceCount == 0) {
+            throw std::runtime_error("failed to find GPUs with Vulkan support!");
+        }
+
+        std::vector<VkPhysicalDevice> devices(deviceCount);
+        vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+
+        for(const auto& device : devices) {
+            if(isDeviceSuitable(device)) {
+                physicalDevice = device;
+                break;
+            }
+        }
+
+        if(physicalDevice == VK_NULL_HANDLE) {
+            throw std::runtime_error("failed to find a suitable GPU!");
+        }
+    }
+
+    bool isDeviceSuitable(VkPhysicalDevice device) {
+        VkPhysicalDeviceProperties deviceProperties;
+        VkPhysicalDeviceFeatures deviceFeatures;
+        vkGetPhysicalDeviceProperties(device, &deviceProperties);
+        vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+        
+        std::stringstream ss;
+        ss << "DEVICE NAME: " << deviceProperties.deviceName << std::endl;
+        ss << "\t" << "DEVICE ID: " << deviceProperties.deviceID << std::endl;
+        ss << "\t" << "VENDOR ID: " << deviceProperties.vendorID << std::endl;
+        ss << "\t" << "DEVICE TYPE: " << deviceProperties.deviceType << std::endl;
+        ss << "\t" << "API VERSION: " << deviceProperties.apiVersion << std::endl;
+        ss << "\t" << "DRIVER VERSION: " << deviceProperties.driverVersion << std::endl;
+        std::cout << ss.str();
+
+        // return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+        // Doesn't matter at the moment anyway
+        return true;
     }
 
     void mainLoop() {
