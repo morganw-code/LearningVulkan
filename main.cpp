@@ -36,6 +36,8 @@ private:
     GLFWwindow* window = nullptr;
     VkInstance instance;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    VkDevice device;
+    VkQueue graphicsQueue;
 
     void initWindow() {
         glfwInit();
@@ -54,15 +56,16 @@ private:
         createInstance();
         queryAvailableExtensions();
         pickPhysicalDevice();
+        createLogicalDevice();
     }
 
     void createInstance() {
-        if(enableValidationLayers && !checkValidationLayerSupport()) {
+        if(enableValidationLayers && !checkValidationLayerSupport() && !validationLayers.empty()) {
             throw std::runtime_error("validation layers requested, but were not available!\n");
         } else { std::cout << "validation layers enabled\n"; }
 
         // VkApplicationInfo struct
-        VkApplicationInfo appInfo;
+        VkApplicationInfo appInfo {};
         // Set the VkStructureType
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         appInfo.pApplicationName = "Vulkan";
@@ -72,7 +75,7 @@ private:
         appInfo.apiVersion = VK_API_VERSION_1_0;
 
         // VKInstanceCreateInfo struct
-        VkInstanceCreateInfo createInfo;
+        VkInstanceCreateInfo createInfo {};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         // Reference our appInfo struct
         createInfo.pApplicationInfo = &appInfo;
@@ -83,7 +86,7 @@ private:
         createInfo.ppEnabledExtensionNames = glfwExtensions;
 
         // If validationLayers is true, set layer count and pass vector of layer names (Vulkan wants a pointer to the internal array, which is why .data() is called)
-        if(enableValidationLayers) {
+        if(enableValidationLayers && !validationLayers.empty()) {
             createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
             createInfo.ppEnabledLayerNames = validationLayers.data();
         } else { createInfo.enabledLayerCount = 0; }
@@ -195,7 +198,7 @@ private:
 
         int i = 0;
         for(const auto& queueFamily : queueFamilies) {
-            if(queueFamily.queueFlags && VK_QUEUE_GRAPHICS_BIT) {
+            if(queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
                 indices.graphicsFamily = i;
             }
             
@@ -209,6 +212,40 @@ private:
         return indices;
     }
 
+    void createLogicalDevice() {
+        QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+
+        VkDeviceQueueCreateInfo queueCreateInfo {};
+        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
+        queueCreateInfo.queueCount = 1;
+
+        float queuePriority = 1.0f;
+        queueCreateInfo.pQueuePriorities = &queuePriority;
+
+        VkPhysicalDeviceFeatures deviceFeatures {};
+        VkDeviceCreateInfo createInfo {};
+        createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+
+        createInfo.pQueueCreateInfos = &queueCreateInfo;
+        createInfo.queueCreateInfoCount = 1;
+
+        createInfo.pEnabledFeatures = &deviceFeatures;
+
+        createInfo.enabledExtensionCount = 0;
+
+        if (enableValidationLayers) {
+            createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+            createInfo.ppEnabledLayerNames = validationLayers.data();
+        } else { createInfo.enabledLayerCount = 0; }
+
+        if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create logical device!");
+        }
+
+        vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
+    }
+
     void mainLoop() {
         while(!glfwWindowShouldClose(window)) {
             glfwPollEvents();
@@ -217,6 +254,7 @@ private:
 
     void cleanup() {
         // Cleanup Vulkan
+        vkDestroyDevice(device, nullptr);
         vkDestroyInstance(instance, nullptr);
 
         // Cleanup GLFW
