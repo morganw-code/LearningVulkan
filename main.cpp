@@ -6,11 +6,22 @@
 #include <cstdlib>
 #include <vector>
 #include <sstream>
+#include <cstring>
 
 class Application {
 public:
     const int WIDTH = 800;
     const int HEIGHT = 600;
+
+    const std::vector<const char*> validationLayers = {
+        "VK_LAYER_KHRONOS_validation"
+    };
+
+#ifdef NDEBUG
+    const bool enableValidationLayers = false;
+#else
+    const bool enableValidationLayers = true;
+#endif
 
     void run() {
         initWindow();
@@ -39,6 +50,10 @@ private:
     }
 
     void createInstance() {
+        if(enableValidationLayers && !checkValidationLayerSupport()) {
+            throw std::runtime_error("validation layers requested, but were not available!\n");
+        } else { std::cout << "validation layers enabled\n"; }
+
         // VkApplicationInfo struct
         VkApplicationInfo appInfo;
         // Set the VkStructureType
@@ -59,11 +74,16 @@ private:
         glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
         createInfo.enabledExtensionCount = glfwExtensionCount;
         createInfo.ppEnabledExtensionNames = glfwExtensions;
-        createInfo.enabledLayerCount = 0;
+
+        // If validationLayers is true, set layer count and pass vector of layer names (Vulkan wants a pointer to the internal array, which is why .data() is called)
+        if(enableValidationLayers) {
+            createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+            createInfo.ppEnabledLayerNames = validationLayers.data();
+        } else { createInfo.enabledLayerCount = 0; }
 
         // Create VkInstance passing createInfo struct and assign handle to class member 'instance'
         if(vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create vkInstance!");
+            throw std::runtime_error("failed to create vkInstance\n!");
         } else { std::cout << "vkInstance created!\n"; }
     }
 
@@ -73,12 +93,32 @@ private:
         std::vector<VkExtensionProperties> extensions(extensionCount);
         vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
         std::stringstream ss;
+
         ss << "Available extensions:\n";
         for(const auto& extension : extensions) {
             ss << "\t" << extension.extensionName << "\n";
         }
 
         std::cout << ss.str() << std::endl;
+    }
+
+    bool checkValidationLayerSupport() {
+        uint32_t layerCount = 0;
+        vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+        std::vector<VkLayerProperties> availableLayers(layerCount);
+        vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+        bool layerFound = false;
+        for(const char* layerName : validationLayers) {
+            for(const auto& layerProperties : availableLayers) {
+                if(strcmp(layerName, layerProperties.layerName) == 0) {
+                    layerFound = true;
+                    break;
+                }
+            }
+        }
+
+        return layerFound;
     }
 
     void mainLoop() {
