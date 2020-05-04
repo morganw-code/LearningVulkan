@@ -8,6 +8,8 @@
 #include <sstream>
 #include <cstring>
 
+#include <optional>
+
 class Application {
 public:
     const int WIDTH = 800;
@@ -151,6 +153,7 @@ private:
     }
 
     bool isDeviceSuitable(VkPhysicalDevice device) {
+        QueueFamilyIndices indices = findQueueFamilies(device);
         VkPhysicalDeviceProperties deviceProperties;
         VkPhysicalDeviceFeatures deviceFeatures;
         vkGetPhysicalDeviceProperties(device, &deviceProperties);
@@ -167,7 +170,43 @@ private:
 
         // return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
         // Doesn't matter at the moment anyway
-        return true;
+        return indices.isComplete();
+    }
+
+    struct QueueFamilyIndices {
+        // We query if graphicsFamily has a value thus why it's "optional"
+        std::optional<uint32_t> graphicsFamily;
+
+        bool isComplete() {
+            return graphicsFamily.has_value();
+        }
+    };
+ 
+    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
+        // From vulkan-tutorial.com
+        // "It has been briefly touched upon before that almost every operation in Vulkan, anything from drawing to uploading textures, requires commands to be submitted to a queue.
+        // There are different types of queues that originate from different queue families and each family of queues allows only a subset of commands."
+        QueueFamilyIndices indices;
+
+        uint32_t queueFamilyCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+        int i = 0;
+        for(const auto& queueFamily : queueFamilies) {
+            if(queueFamily.queueFlags && VK_QUEUE_GRAPHICS_BIT) {
+                indices.graphicsFamily = i;
+            }
+            
+            if(indices.isComplete()) {
+                break;
+            }
+
+            i++;
+        }
+
+        return indices;
     }
 
     void mainLoop() {
